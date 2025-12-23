@@ -183,8 +183,8 @@ class PrefetcherWrapper(implicit p: Parameters) extends PrefetchModule {
       pf.io.ld_in(i).valid := Mux(
         pf_train_on_hit,
         primaryValid,
-        primaryValid && source.bits.isFirstIssue && source.bits.miss
-      ) // && isLoadAccess(source.bits.uop)
+        primaryValid && source.bits.isFirstIssue && (source.bits.miss || isFromL1Prefetch(source.bits.metaSource))
+      )
       pf.io.ld_in(i).bits := source.bits
       pf.io.ld_in(i).bits.pc := Mux(
         io.trainSource.s3_ptrChasing(i),
@@ -199,8 +199,8 @@ class PrefetcherWrapper(implicit p: Parameters) extends PrefetchModule {
       pf.io.st_in(i).valid := Mux(
         pf_train_on_hit,
         primaryValid,
-        primaryValid && source.bits.isFirstIssue && source.bits.miss
-      ) // && isStoreAccess(source.bits.uop)
+        primaryValid && source.bits.isFirstIssue && (source.bits.miss || isFromL1Prefetch(source.bits.metaSource))
+      )
       pf.io.st_in(i).bits := source.bits
       pf.io.st_in(i).bits.pc := s3_storePcVec(i)
     }
@@ -226,10 +226,11 @@ class PrefetcherWrapper(implicit p: Parameters) extends PrefetchModule {
 
     // stride will train on miss or prefetch hit
     for(i <- 0 until LD_TRAIN_WIDTH){
+      // for stride
       val source = io.trainSource.s3_load(i)
       pf.stride_train(i).valid := source.valid && source.bits.isFirstIssue && (
-        source.bits.miss || isFromStride(source.bits.metaSource)
-      ) && !source.bits.isHwPrefetch // && isLoadAccess(source.bits.uop)
+        source.bits.miss || isFromL1Prefetch(source.bits.metaSource)
+      ) && !source.bits.isHwPrefetch
       pf.stride_train(i).bits := source.bits
       pf.stride_train(i).bits.pc := Mux(
         io.trainSource.s3_ptrChasing(i),
@@ -237,7 +238,6 @@ class PrefetcherWrapper(implicit p: Parameters) extends PrefetchModule {
         s3_loadPcVec(i)
       )
       pf.io.ld_in(i).valid := source.valid && source.bits.isFirstIssue && !source.bits.isHwPrefetch
-      // && isLoadAccess(source.bits.uop)
       pf.io.ld_in(i).bits := source.bits
     }
 
@@ -265,8 +265,8 @@ class PrefetcherWrapper(implicit p: Parameters) extends PrefetchModule {
     for(i <- 0 until LD_TRAIN_WIDTH){
       val source = io.trainSource.s3_load(i)
       pf.io.ld_in(i).valid := source.valid && source.bits.isFirstIssue && (
-        source.bits.miss || isFromBerti(source.bits.metaSource)
-      ) && !source.bits.isHwPrefetch // && isLoadAccess(source.bits.uop)
+        source.bits.miss || isFromL1Prefetch(source.bits.metaSource)
+      ) && !source.bits.isHwPrefetch
       pf.io.ld_in(i).bits := source.bits
       pf.io.ld_in(i).bits.pc := Mux(
         io.trainSource.s3_ptrChasing(i),
