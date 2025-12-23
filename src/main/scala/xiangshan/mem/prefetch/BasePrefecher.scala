@@ -84,6 +84,7 @@ class TrainReqBundle()(implicit p: Parameters) extends DCacheBundle {
   val isFirstIssue = Bool()
   val isHwPrefetch = Bool()
   val refillLatency = UInt(LATENCY_WIDTH.W)
+  val lqIdx = new LqPtr()
 }
 
 class SourcePrefetchReq()(implicit p: Parameters) extends DCacheBundle {
