@@ -295,19 +295,34 @@ class TLBFA(
   println(s"${parentName} tlb_fa: nSets${nSets} nWays:${nWays}")
 }
 
+// TLBFakeFA: Software TLB implementation using DPI-C PTEHelper for debug/simulation
+// This module bypasses hardware page table walk and uses C++ reference model instead
 class TLBFakeFA(
-             ports: Int,
-             nDups: Int,
-             nSets: Int,
-             nWays: Int,
-             useDmode: Boolean = false
-           )(implicit p: Parameters) extends TlbModule with HasCSRConst{
+  ports: Int,
+  nDups: Int,
+  nSets: Int,
+  nWays: Int,
+  useDmode: Boolean = false
+)(implicit p: Parameters) extends TlbModule with HasCSRConst {
 
   val io = IO(new TlbStorageIO(nSets, nWays, ports, nDups))
   io.r.req.map(_.ready := true.B)
+
   val mode = if (useDmode) io.csr.priv.dmode else io.csr.priv.imode
-  val vmEnable = if (EnbaleTlbDebug) (io.csr.satp.mode === 8.U)
-    else (io.csr.satp.mode === 8.U && (mode < ModeM))
+  val sv39Enable = io.csr.satp.mode === 8.U
+  val sv48Enable = io.csr.satp.mode === 9.U
+  val sv39vsEnable = io.csr.vsatp.mode === 8.U
+  val sv48vsEnable = io.csr.vsatp.mode === 9.U
+  val sv39x4Enable = io.csr.hgatp.mode === 8.U
+  val sv48x4Enable = io.csr.hgatp.mode === 9.U
+
+  val vmEnable = if (EnbaleTlbDebug) (sv39Enable || sv48Enable)
+    else ((sv39Enable || sv48Enable) && (mode < ModeM))
+  val s2xlateEnable = if (EnbaleTlbDebug) {
+    sv39vsEnable || sv48vsEnable || sv39x4Enable || sv48x4Enable
+  } else {
+    (sv39vsEnable || sv48vsEnable || sv39x4Enable || sv48x4Enable) && (mode < ModeM)
+  }
 
   for (i <- 0 until ports) {
     val req = io.r.req(i)
@@ -315,34 +330,84 @@ class TLBFakeFA(
 
     val helper = Module(new PTEHelper())
     helper.clock := clock
-    helper.satp := io.csr.satp.ppn
-    helper.enable := req.fire && vmEnable
+    helper.satp := Cat(io.csr.satp.mode, io.csr.satp.asid, io.csr.satp.ppn)
+    helper.vsatp := Cat(io.csr.vsatp.mode, io.csr.vsatp.asid, io.csr.vsatp.ppn)
+    helper.hgatp := Cat(io.csr.hgatp.mode, io.csr.hgatp.vmid, io.csr.hgatp.ppn)
+    helper.s2xlate := req.bits.s2xlate
+
+    helper.enable := req.fire &&
+      Mux(req.bits.s2xlate === noS2xlate, vmEnable, s2xlateEnable) &&
+      !reset.asBool
     helper.vpn := req.bits.vpn
 
-    val pte = helper.pte.asTypeOf(new PteBundle)
-    val ppn = pte.ppn
-    val vpn_reg = RegEnable(req.bits.vpn, req.valid)
-    val pf = helper.pf
-    val level = helper.level
+    // Parse PTE result from helper
+    val pte = RegEnable(helper.pte, helper.enable).asTypeOf(new PteBundle)
+    val fullppn = pte.getPPN()
+    val pf = RegEnable(helper.pf, helper.enable)
+    val level = RegEnable(helper.level, helper.enable)
+    val s1Pte = RegEnable(helper.s1_pte, helper.enable).asTypeOf(new PteBundle)
+    val s2Pte = RegEnable(helper.s2_pte, helper.enable).asTypeOf(new PteBundle)
+    val s1Level = RegEnable(helper.s1_level, helper.enable)
+
+    val vpnReg = RegEnable(req.bits.vpn, req.valid)
+    val s2xlateReg = RegEnable(req.bits.s2xlate, req.valid)
+    val isAllStage = s2xlateReg === allStage
+
+    // Two-step superpage PPN splicing for allStage mode (genPPN + genPPNS2)
+    // Step 1: VS-stage PPN + VPN -> GPA PPN (simulates genPPN)
+    val s1FullPPN = s1Pte.getPPN()
+    val gpaPPN = MuxLookup(s1Level, s1FullPPN)(Seq(
+      0.U -> s1FullPPN,
+      1.U -> Cat(s1FullPPN(ptePPNLen - 1, vpnnLen), vpnReg(vpnnLen - 1, 0)),
+      2.U -> Cat(s1FullPPN(ptePPNLen - 1, vpnnLen * 2), vpnReg(vpnnLen * 2 - 1, 0))
+    ))
+    // Step 2: G-stage PPN + GPA PPN -> HPA PPN (simulates genPPNS2)
+    val s2FullPPN = s2Pte.getPPN()
+    val hpaPPN = MuxLookup(level, s2FullPPN)(Seq(
+      0.U -> s2FullPPN,
+      1.U -> Cat(s2FullPPN(ptePPNLen - 1, vpnnLen), gpaPPN(vpnnLen - 1, 0)),
+      2.U -> Cat(s2FullPPN(ptePPNLen - 1, vpnnLen * 2), gpaPPN(vpnnLen * 2 - 1, 0))
+    ))
 
     resp.valid := RegNext(req.valid)
     resp.bits.hit := true.B
+
     for (d <- 0 until nDups) {
-      resp.bits.perm(d).pf := pf
+      // VS-stage permission: for allStage use s1Pte, otherwise use pte
+      resp.bits.perm(d).pf := pf === 1.U
       resp.bits.perm(d).af := false.B
-      resp.bits.perm(d).d := pte.perm.d
-      resp.bits.perm(d).a := pte.perm.a
-      resp.bits.perm(d).g := pte.perm.g
-      resp.bits.perm(d).u := pte.perm.u
-      resp.bits.perm(d).x := pte.perm.x
-      resp.bits.perm(d).w := pte.perm.w
-      resp.bits.perm(d).r := pte.perm.r
-      resp.bits.pbmt(d) := pte.pbmt
-      resp.bits.ppn(d) := MuxLookup(level, 0.U)(Seq(
-        0.U -> Cat(ppn(ppn.getWidth-1, vpnnLen*2), vpn_reg(vpnnLen*2-1, 0)),
-        1.U -> Cat(ppn(ppn.getWidth-1, vpnnLen), vpn_reg(vpnnLen-1, 0)),
-        2.U -> ppn)
-      )
+      resp.bits.perm(d).v := Mux(isAllStage, s1Pte.perm.v, pf === 0.U)
+      resp.bits.perm(d).d := Mux(isAllStage, s1Pte.perm.d, pte.perm.d)
+      resp.bits.perm(d).a := Mux(isAllStage, s1Pte.perm.a, pte.perm.a)
+      resp.bits.perm(d).g := Mux(isAllStage, s1Pte.perm.g, pte.perm.g)
+      resp.bits.perm(d).u := Mux(isAllStage, s1Pte.perm.u, pte.perm.u)
+      resp.bits.perm(d).x := Mux(isAllStage, s1Pte.perm.x, pte.perm.x)
+      resp.bits.perm(d).w := Mux(isAllStage, s1Pte.perm.w, pte.perm.w)
+      resp.bits.perm(d).r := Mux(isAllStage, s1Pte.perm.r, pte.perm.r)
+      resp.bits.pbmt(d) := Mux(isAllStage, s1Pte.pbmt, pte.pbmt)
+
+      // PPN calculation based on page level (superpage handling)
+      val normalPPN = Mux(isAllStage, hpaPPN, MuxLookup(level, fullppn)(Seq(
+        0.U -> fullppn,
+        1.U -> Cat(fullppn(fullppn.getWidth - 1, vpnnLen), vpnReg(vpnnLen - 1, 0)),
+        2.U -> Cat(fullppn(fullppn.getWidth - 1, vpnnLen * 2), vpnReg(vpnnLen * 2 - 1, 0))
+      )))
+      resp.bits.ppn(d) := normalPPN
+
+      // G-stage permission: for allStage use s2Pte, otherwise use pte
+      resp.bits.g_perm(d).pf := pf === 2.U
+      resp.bits.g_perm(d).af := false.B
+      resp.bits.g_perm(d).v := Mux(isAllStage, s2Pte.perm.v, pf === 0.U)
+      resp.bits.g_perm(d).d := Mux(isAllStage, s2Pte.perm.d, pte.perm.d)
+      resp.bits.g_perm(d).a := Mux(isAllStage, s2Pte.perm.a, pte.perm.a)
+      resp.bits.g_perm(d).g := Mux(isAllStage, s2Pte.perm.g, pte.perm.g)
+      resp.bits.g_perm(d).u := Mux(isAllStage, s2Pte.perm.u, pte.perm.u)
+      resp.bits.g_perm(d).x := Mux(isAllStage, s2Pte.perm.x, pte.perm.x)
+      resp.bits.g_perm(d).w := Mux(isAllStage, s2Pte.perm.w, pte.perm.w)
+      resp.bits.g_perm(d).r := Mux(isAllStage, s2Pte.perm.r, pte.perm.r)
+      resp.bits.g_pbmt(d) := Mux(isAllStage, s2Pte.pbmt, pte.pbmt)
+
+      resp.bits.s2xlate(d) := s2xlateReg
     }
   }
 
