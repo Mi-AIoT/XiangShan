@@ -42,7 +42,7 @@ trait HasStreamPrefetchHelper extends HasL1PrefetchHelper {
   val DEPTH_LOOKAHEAD = 8
   val DEPTH_BITS = log2Up(DEPTH_CACHE_BLOCKS) + DEPTH_LOOKAHEAD
 
-  val ENABLE_DECR_MODE = false
+  val ENABLE_DECR_MODE = true
   val ENABLE_STRICT_ACTIVE_DETECTION = true
   val USE_STREAM_FIXED_DEPTH = true
 
@@ -92,7 +92,7 @@ class StreamBitVectorBundle(implicit p: Parameters) extends XSBundle with HasStr
     assert(PopCount(alloc_bit_vec) === 1.U, "alloc vector should be one hot")
   }
 
-  def update(update_bit_vec: UInt, update_active: Bool) = {
+  def update(update_bit_vec: UInt, update_active: Bool, update_decr_mode: Bool) = {
     // if the slot is 0 before, increment cnt
     val cnt_en = !((bit_vec & update_bit_vec).orR)
     val cnt_next = Mux(cnt_en, cnt + 1.U, cnt)
@@ -104,6 +104,10 @@ class StreamBitVectorBundle(implicit p: Parameters) extends XSBundle with HasStr
     }
     when(update_active) {
       active := true.B
+    }
+    
+    if(ENABLE_DECR_MODE) {
+      decr_mode := decr_mode || update_decr_mode
     }
 
     assert(PopCount(update_bit_vec) === 1.U, "update vector should be one hot")
@@ -192,11 +196,12 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
 
   // s0: generate region tag, parallel match
   val s0_can_accept = Wire(Bool())
-  val s0_valid = io.train_req.fire
+  val s0_fire = io.train_req.fire
   val s0_pc    = io.train_req.bits.pc
   val s0_vaddr = io.train_req.bits.vaddr
   val s0_miss  = io.train_req.bits.miss
   val s0_pfHit = io.train_req.bits.pfHitStream
+  val s0_valid = s0_fire && (s0_miss || s0_pfHit)
   val s0_region_bits = get_region_bits(s0_vaddr)
   val s0_region_tag = get_region_tag(s0_vaddr)
   val s0_region_tag_plus_one = get_region_tag(s0_vaddr) + 1.U
@@ -310,13 +315,12 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
   val s1_pf_l2_decr_vaddr = Cat(region_to_block_addr(s1_region_tag, s1_region_bits) - l2_depth, 0.U(BLOCK_OFFSET.W))
   val s1_pf_l3_incr_vaddr = Cat(region_to_block_addr(s1_region_tag, s1_region_bits) + l3_depth, 0.U(BLOCK_OFFSET.W))
   val s1_pf_l3_decr_vaddr = Cat(region_to_block_addr(s1_region_tag, s1_region_bits) - l3_depth, 0.U(BLOCK_OFFSET.W))
-  // TODO: remove this
-  val strict_trigger_const = Constantin.createRecord(s"StreamStrictTrigger_${p(XSCoreParamsKey).HartId}", initValue = 1)
-  // If use strict triggering mode, the stream prefetcher will only trigger prefetching
-  // under **cache miss or prefetch hit stream**, but will still perform training on the entire memory access trace.
-  val s1_can_trigger = Mux(strict_trigger_const.orR, s1_miss || s1_pfHit, true.B)
-  val s1_can_send_pf = Mux(s1_update, !((array(s1_index).bit_vec & UIntToOH(s1_region_bits)).orR), true.B) && s1_can_trigger
-  s0_can_accept := !(s1_valid && (region_hash_tag(s1_region_tag) === region_hash_tag(s0_region_tag)))
+  val s1_can_send_pf = Mux(s1_update, !((array(s1_index).bit_vec & UIntToOH(s1_region_bits)).orR), true.B)
+  // Check s0 s1 same region, avoid duplicate alloc
+  val s1_s0_same_region = region_hash_tag(s1_region_tag) === region_hash_tag(s0_region_tag)
+  // s1 replace the s0 region entry
+  val s1_s0_harzard = s1_index === OHToUInt(array zip valids map { case (e, v) => e.tag_match(v, true.B, s0_region_tag) })
+  s0_can_accept := !(s1_valid && s1_alloc && (s1_s0_same_region || s1_s0_harzard))
 
   when(s1_alloc) {
     // alloc a new entry
@@ -334,13 +338,24 @@ class StreamBitVectorArray(implicit p: Parameters) extends XSModule with HasStre
     assert(array(s1_index).cnt =/= 0.U || valids(s1_index), "entry should have been allocated before")
     array(s1_index).update(
       update_bit_vec = UIntToOH(s1_region_bits),
-      update_active = s1_plus_one_hit || s1_minus_one_hit)
+      update_active = s1_plus_one_hit || s1_minus_one_hit,
+      update_decr_mode = RegEnable(s0_plus_one_hit, s0_valid)
+      )
   }
 
   XSPerfAccumulate("s1_alloc", s1_alloc)
   XSPerfAccumulate("s1_update", s1_update)
   XSPerfAccumulate("s1_active_plus_one_hit", s1_valid && s1_plus_one_hit)
   XSPerfAccumulate("s1_active_minus_one_hit", s1_valid && s1_minus_one_hit)
+
+  val stream_array_table = ChiselDB.createTable("StreamArrayTable" + p(XSCoreParamsKey).HartId.toString, new StreamBitVectorBundle, basicDB = false)
+  stream_array_table.log(
+    data = array(s1_index),
+    en = s1_alloc && valids(s1_index),
+    site = "StreamArrayTable",
+    clock = clock,
+    reset = reset
+  )
 
   // s2: trigger prefetch if hit active bit vector, compute meta of prefetch req
   val s2_valid = GatedValidRegNext(s1_valid)
