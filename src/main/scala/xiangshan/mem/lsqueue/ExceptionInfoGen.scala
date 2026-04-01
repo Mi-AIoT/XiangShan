@@ -167,11 +167,26 @@ class ExceptionInfoGen(implicit p: Parameters) extends XSModule {
     v && p.hasException && !p.robIdx.needFlush(io.redirect)
   } // for timing, generate selectValid here
 
-  private val oldest = getOldest(selectValid, s1Bits)
-  private val s1OutValid = selectValid.reduce(_ || _)
+  val groupSize=4
+  val selectValidGroups = selectValid.grouped(groupSize).toSeq
+  val s1BitsGroups = s1Bits.grouped(groupSize).toSeq
+  val oldestVec = VecInit(
+    selectValidGroups.zip(s1BitsGroups).map { case (valids, bits) =>
+      getOldest(valids, bits)
+    }
+  )
+  /*===================================================== s2 stage ===================================================*/
+  private val s2Valid = selectValidGroups.map(x => RegNext(x.reduce(_ || _))) 
+  private val s2Bits  = oldestVec.map(x => RegNext(x)) 
+  private val s2SelectValid = s2Valid.zip(s2Bits).map{case (v, p) =>
+    v && p.hasException && !p.robIdx.needFlush(io.redirect)
+  } // for timing, generate selectValid here
+
+  private val oldest = getOldest(s2SelectValid, s2Bits)
+  private val s2OutValid = s2SelectValid.reduce(_ || _)
 
   when(currentValid) {
-    when(s1OutValid) {
+    when(s2OutValid) {
       when(currentExcp.robIdx > oldest.robIdx || oldest.robIdx === currentExcp.robIdx && currentExcp.uopIdx > oldest.uopIdx) {
         currentExcp := oldest
       }
@@ -180,9 +195,9 @@ class ExceptionInfoGen(implicit p: Parameters) extends XSModule {
     currentExcp  := oldest
   }
 
-  when(!currentValid && s1OutValid) { // TODO: need valid ? maby for debug.
+  when(!currentValid && s2OutValid) { // TODO: need valid ? maby for debug.
     currentValid := true.B
-  }.elsewhen(currentValid && currentExcp.robIdx.needFlush(io.redirect) && !s1OutValid){
+  }.elsewhen(currentValid && currentExcp.robIdx.needFlush(io.redirect) && !s2OutValid){
     currentValid :=false.B
   }
 
