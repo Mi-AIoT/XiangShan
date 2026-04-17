@@ -74,6 +74,15 @@ JVM_XSS ?= 256m
 
 # mill arguments for build.sc
 MILL_BUILD_ARGS = -Djvm-xmx=$(JVM_XMX) -Djvm-xss=$(JVM_XSS)
+JAVA_BIN := $(shell command -v java 2>/dev/null)
+JAVA_HOME_VALID := $(shell if [ -n "$(JAVA_HOME)" ] && [ -x "$(JAVA_HOME)/bin/java" ]; then echo yes; fi)
+ifeq ($(JAVA_HOME_VALID),yes)
+RESOLVED_JAVA_HOME := $(JAVA_HOME)
+else
+RESOLVED_JAVA_HOME := $(shell if [ -n "$(JAVA_BIN)" ]; then dirname "$$(dirname "$$(readlink -f "$(JAVA_BIN)")")"; fi)
+endif
+MILL_ENV = $(if $(strip $(RESOLVED_JAVA_HOME)),JAVA_HOME=$(RESOLVED_JAVA_HOME))
+MILL = $(MILL_ENV) mill
 
 # common chisel args
 MFC_ARGS = --target $(CHISEL_TARGET) \
@@ -245,29 +254,29 @@ endif
 .DEFAULT_GOAL = verilog
 
 help:
-	mill -i xiangshan.runMain $(FPGATOP) --help
+	$(MILL) -i xiangshan.runMain $(FPGATOP) --help
 
 version:
-	mill -i xiangshan.runMain $(FPGATOP) --version
+	$(MILL) -i xiangshan.runMain $(FPGATOP) --version
 
 jar:
-	mill -i xiangshan.assembly
+	$(MILL) -i xiangshan.assembly
 
 $(JAR): FORCE
-	mill -i xiangshan.test.assembly
+	$(MILL) -i xiangshan.test.assembly
 	@mkdir -p $(@D); \
-	JAR_REF=$(shell mill -i show xiangshan.test.assembly 2> /dev/null); \
+	JAR_REF=$(shell $(MILL) -i show xiangshan.test.assembly 2> /dev/null); \
 	[ ! -z $${JAR_REF} ] && echo $${JAR_REF} | sed 's/"//g' | awk -F: '{print $$4}' \
 		| xargs -I{} cp {} $@
 test-jar: $(call docker-deps,$(JAR))
 
 comp:
-	mill -i xiangshan.compile
-	mill -i xiangshan.test.compile
+	$(MILL) -i xiangshan.compile
+	$(MILL) -i xiangshan.test.compile
 
 $(TOP_V): $(SCALA_FILE)
-	mkdir -p $(@D)
-	$(TIME_CMD) mill -i $(MILL_BUILD_ARGS) xiangshan.runMain $(FPGATOP) \
+	mkdir -p $(@D) $(dir $(TIMELOG))
+	$(MILL_ENV) $(TIME_CMD) mill -i $(MILL_BUILD_ARGS) xiangshan.runMain $(FPGATOP) \
 		--target-dir $(@D) --config $(CONFIG) --issue $(ISSUE) \
 		--num-cores $(NUM_CORES) $(TOPMAIN_ARGS)
 ifeq ($(CHISEL_TARGET),systemverilog)
@@ -280,10 +289,13 @@ FRONTEND_RTL_DIR   = $(FRONTEND_BUILD_DIR)/rtl
 FRONTENDTOP        = top.FrontendTopMain
 FRONTEND_TOP_V     = $(FRONTEND_RTL_DIR)/FrontendTop.$(RTL_SUFFIX)
 FRONTEND_PYLIB     = $(FRONTEND_BUILD_DIR)/pylib/libUTFrontend.so
+FRONTEND_CCACHE_DIR ?= $(abspath $(FRONTEND_BUILD_DIR)/.ccache)
+FRONTEND_CCACHE_TMP ?= $(abspath $(FRONTEND_BUILD_DIR)/.ccache-tmp)
+FRONTEND_CCACHE_ENV = CCACHE_DIR=$(FRONTEND_CCACHE_DIR) CCACHE_TEMPDIR=$(FRONTEND_CCACHE_TMP)
 
 $(FRONTEND_TOP_V): $(SCALA_FILE)
-	mkdir -p $(@D)
-	$(TIME_CMD) mill -i $(MILL_BUILD_ARGS) xiangshan.runMain $(FRONTENDTOP) \
+	mkdir -p $(@D) $(dir $(TIMELOG))
+	$(MILL_ENV) $(TIME_CMD) mill -i $(MILL_BUILD_ARGS) xiangshan.runMain $(FRONTENDTOP) \
 		--target-dir $(@D) --config $(CONFIG) --issue $(ISSUE) \
 		--num-cores $(NUM_CORES) $(TOPMAIN_ARGS)
 ifeq ($(CHISEL_TARGET),systemverilog)
@@ -292,7 +304,9 @@ ifeq ($(CHISEL_TARGET),systemverilog)
 endif
 
 $(FRONTEND_PYLIB): $(FRONTEND_TOP_V)
-	time picker export $(dir $<)ClockGate.sv --sname Frontend \
+	rm -rf $(FRONTEND_BUILD_DIR)/pylib/Frontend
+	mkdir -p $(FRONTEND_CCACHE_DIR) $(FRONTEND_CCACHE_TMP)
+	$(FRONTEND_CCACHE_ENV) time picker export $(dir $<)ClockGate.sv --sname Frontend \
 		--filelist $(dir $<)/filelist.f \
 		--lang python --autobuild true --cp_lib true \
 		--sim verilator --access-mode MEM_DIRECT \
@@ -306,10 +320,10 @@ frontend: $(FRONTEND_PYLIB)
 verilog: $(call docker-deps,$(TOP_V))
 
 $(SIM_TOP_V): $(SCALA_FILE) $(TEST_FILE)
-	mkdir -p $(@D)
+	mkdir -p $(@D) $(dir $(TIMELOG))
 	@echo -e "\n[mill] Generating Verilog files..." > $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
-	$(TIME_CMD) mill -i $(MILL_BUILD_ARGS) xiangshan.test.runMain $(SIMTOP) \
+	$(MILL_ENV) $(TIME_CMD) mill -i $(MILL_BUILD_ARGS) xiangshan.test.runMain $(SIMTOP) \
 		--target-dir $(@D) --config $(CONFIG) --issue $(ISSUE) \
 		--num-cores $(NUM_CORES) $(SIM_ARGS) --full-stacktrace
 ifeq ($(CHISEL_TARGET),systemverilog)
@@ -351,20 +365,20 @@ bump:
 	git submodule foreach "git fetch origin&&git checkout master&&git reset --hard origin/master"
 
 deps:
-	mill -i __.prepareOffline
-	mill -i xiangshan.resolveFirtoolDeps
+	$(MILL) -i __.prepareOffline
+	$(MILL) -i xiangshan.resolveFirtoolDeps
 
 bsp:
-	mill -i mill.bsp.BSP/install
+	$(MILL) -i mill.bsp.BSP/install
 
 idea:
-	mill -i mill.idea.GenIdea/idea
+	$(MILL) -i mill.idea.GenIdea/idea
 
 check-format:
-	mill xiangshan.checkFormat
+	$(MILL) xiangshan.checkFormat
 
 reformat:
-	mill xiangshan.reformat
+	$(MILL) xiangshan.reformat
 
 # verilator simulation
 emu-mk: sim-verilog
