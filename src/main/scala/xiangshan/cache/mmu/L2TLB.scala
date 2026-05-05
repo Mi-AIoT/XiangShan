@@ -959,6 +959,8 @@ class PTEHelper() extends ExtModule {
   val satp    = IO(Input(UInt(64.W)))  // Host satp for noS2xlate mode
   val vsatp   = IO(Input(UInt(64.W)))  // Guest vsatp for VS-stage
   val hgatp   = IO(Input(UInt(64.W)))  // Hypervisor hgatp for G-stage
+  val mPBMTE  = IO(Input(Bool()))      // Machine-stage PBMTE enable for G-stage walk
+  val hPBMTE  = IO(Input(Bool()))      // Hypervisor-stage PBMTE enable for VS-stage walk
   val vpn     = IO(Input(UInt(64.W)))  // Virtual page number to translate
   val s2xlate = IO(Input(UInt(8.W)))   // Translation mode
   val pte     = IO(Output(UInt(64.W))) // Output: final PTE
@@ -1028,6 +1030,8 @@ class FakePTW()(implicit p: Parameters) extends XSModule with HasPtwConst {
     helper.satp := Cat(io.csr.tlb.satp.mode, io.csr.tlb.satp.asid, io.csr.tlb.satp.ppn)
     helper.vsatp := Cat(io.csr.tlb.vsatp.mode, io.csr.tlb.vsatp.asid, io.csr.tlb.vsatp.ppn)
     helper.hgatp := Cat(io.csr.tlb.hgatp.mode, io.csr.tlb.hgatp.vmid, io.csr.tlb.hgatp.ppn)
+    helper.mPBMTE := io.csr.tlb.mPBMTE
+    helper.hPBMTE := io.csr.tlb.hPBMTE
 
     if (coreParams.softPTWDelay == 1) {
       helper.enable := io.tlb(i).req(0).fire && !reset.asBool

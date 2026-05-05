@@ -333,6 +333,8 @@ class TLBFakeFA(
     helper.satp := Cat(io.csr.satp.mode, io.csr.satp.asid, io.csr.satp.ppn)
     helper.vsatp := Cat(io.csr.vsatp.mode, io.csr.vsatp.asid, io.csr.vsatp.ppn)
     helper.hgatp := Cat(io.csr.hgatp.mode, io.csr.hgatp.vmid, io.csr.hgatp.ppn)
+    helper.mPBMTE := io.csr.mPBMTE
+    helper.hPBMTE := io.csr.hPBMTE
     helper.s2xlate := req.bits.s2xlate
 
     helper.enable := req.fire &&
