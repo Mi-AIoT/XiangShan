@@ -751,6 +751,13 @@ trait HasXSParameter {
   def EnableAtCommitMissTrigger = coreParams.EnableAtCommitMissTrigger
   def EnableStorePrefetchSMS = coreParams.EnableStorePrefetchSMS
   def EnableStorePrefetchSPB = coreParams.EnableStorePrefetchSPB
+  def MissReqPortCount = {
+    if (EnableStorePrefetchAtCommit || EnableStorePrefetchAtIssue || EnableStorePrefetchSPB) {
+      1 + backendParams.LduCnt + backendParams.StaCnt + backendParams.HyuCnt
+    } else {
+      1 + backendParams.LduCnt + backendParams.HyuCnt
+    }
+  }
   def HasCMO = coreParams.HasCMO && p(EnableCHI)
   require(LoadPipelineWidth == backendParams.LdExuCnt, "LoadPipelineWidth must be equal exuParameters.LduCnt!")
   require(StorePipelineWidth == backendParams.StaCnt, "StorePipelineWidth must be equal exuParameters.StuCnt!")

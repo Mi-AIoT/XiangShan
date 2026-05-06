@@ -422,7 +422,7 @@ class MissEntry(edge: TLEdgeOut, reqNum: Int)(implicit p: Parameters) extends DC
     // client requests
     // MSHR update request, MSHR state and addr will be updated when req.fire
     // val req = Flipped(ValidIO(new MissReqWoStoreData))
-    val wbq_block_miss_req = Input(Bool())
+    val wbq_block_miss_req = Input(Vec(reqNum, Bool()))
     // pipeline reg
     val miss_req_pipe_reg = Input(new MissReqPipeRegBundle(edge))
     // allocate this entry for new req
@@ -592,7 +592,7 @@ class MissEntry(edge: TLEdgeOut, reqNum: Int)(implicit p: Parameters) extends DC
   // allocate current miss queue entry for a miss req
   // Use queryME instead of io.req for parallel enqueue
   val primary_fire_vec = (0 until reqNum).map{ i =>
-    io.entry_valid && io.queryME(i).req.valid && io.primary_ready && !io.queryME(i).req.bits.cancel && !io.wbq_block_miss_req
+    io.entry_valid && io.queryME(i).req.valid && io.primary_ready && !io.queryME(i).req.bits.cancel && !io.wbq_block_miss_req(i)
   }
   val primary_fire = ParallelORR(Cat(primary_fire_vec))
 
@@ -609,7 +609,7 @@ class MissEntry(edge: TLEdgeOut, reqNum: Int)(implicit p: Parameters) extends DC
   // For backward compatibility with io.req (single-port path)
   // Note: io.req.path is deprecated, use queryME instead
   val secondary_fire_vec = (0 until reqNum).map{ i =>
-    io.queryME(i).req.valid && io.secondary_ready(i) && !io.queryME(i).req.bits.cancel && !io.wbq_block_miss_req
+    io.queryME(i).req.valid && io.secondary_ready(i) && !io.queryME(i).req.bits.cancel && !io.wbq_block_miss_req(i)
   }
   val secondary_fire = ParallelORR(Cat(secondary_fire_vec))
 
@@ -1198,7 +1198,7 @@ class MissQueue(edge: TLEdgeOut, reqNum: Int)(implicit p: Parameters) extends DC
     val occupy_fail = Output(Vec(LoadPipelineWidth, Bool()))
 
     // req blocked by wbq
-    val wbq_block_miss_req = Input(Bool())
+    val wbq_block_miss_req = Input(Vec(reqNum, Bool()))
 
     val full = Output(Bool())
 
@@ -1542,7 +1542,7 @@ class MissQueue(edge: TLEdgeOut, reqNum: Int)(implicit p: Parameters) extends DC
 
     val alloc_ready = has_alloc && !has_compress && !has_merge && is_valid
 
-    io.queryMQ(i).ready := (compress_ready || merge_ready || alloc_ready) && !(io.wbq_block_miss_req || io.queryMQ(analysis.compress_group(i)).req.bits.cancel)
+    io.queryMQ(i).ready := (compress_ready || merge_ready || alloc_ready) && !(io.wbq_block_miss_req(i) || io.queryMQ(analysis.compress_group(i)).req.bits.cancel)
   }
 
   // For each queryMQ request that was granted, connect to MissEntry or PipeReg
@@ -1559,15 +1559,15 @@ class MissQueue(edge: TLEdgeOut, reqNum: Int)(implicit p: Parameters) extends DC
     parallel_pipe_regs(i).alloc := ((analysis.strategy(i) & 1.U) =/= 0.U) &&
                                     (analysis.compress_group(i) === i.U) &&
                                     !io.queryMQ(i).req.bits.cancel &&
-                                    !io.wbq_block_miss_req
+                                    !io.wbq_block_miss_req(i)
 
     parallel_pipe_regs(i).merge := ((analysis.strategy(i) & 2.U) =/= 0.U) &&
                                     (analysis.compress_group(i) === i.U) &&
                                     !io.queryMQ(i).req.bits.cancel &&
-                                    !io.wbq_block_miss_req
+                                    !io.wbq_block_miss_req(i)
 
     parallel_pipe_regs(i).mshr_id := analysis.target_mshr(i)
-    parallel_pipe_regs(i).cancel := io.wbq_block_miss_req
+    parallel_pipe_regs(i).cancel := io.wbq_block_miss_req(i)
   }
 
   val req_mshr_handled_vec = entries.map(_.io.req_handled_by_this_entry)
@@ -1909,7 +1909,7 @@ class MissQueue(edge: TLEdgeOut, reqNum: Int)(implicit p: Parameters) extends DC
   }
 
   // Perf count - adapted for multiple enqueue ports
-  XSPerfAccumulate("miss_req", PopCount(Cat(query_fire.map(_ && !io.wbq_block_miss_req))))
+  XSPerfAccumulate("miss_req", PopCount(query_fire))
   XSPerfAccumulate("miss_req_allocate", PopCount(Cat((0 until reqNum).map(i => query_fire(i) && ((analysis.strategy(i) & 1.U) =/= 0.U)))))
   XSPerfAccumulate("miss_req_load_allocate", PopCount(Cat((0 until reqNum).map(i => query_fire(i) && ((analysis.strategy(i) & 1.U) =/= 0.U) && io.queryMQ(i).req.bits.isFromLoad))))
   XSPerfAccumulate("miss_req_store_allocate", PopCount(Cat((0 until reqNum).map(i => query_fire(i) && ((analysis.strategy(i) & 1.U) =/= 0.U) && io.queryMQ(i).req.bits.isFromStore))))
