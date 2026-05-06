@@ -339,9 +339,54 @@ class LoadQueueUncache(implicit p: Parameters) extends XSModule
    *    ready: freelist can allocate
    ******************************************************************/
 
-  val s1_sortedVec = HwSort(VecInit(io.req.map { case x => DataWithPtr(x.valid, x.bits, x.bits.uop.robIdx) }))
-  val s1_req = VecInit(s1_sortedVec.map(_.bits))
-  val s1_valid = VecInit(s1_sortedVec.map(_.valid))
+  val s1_in = VecInit(io.req.map { x => DataWithPtr(x.valid, x.bits, x.bits.uop.robIdx) })
+  val s1_req = Wire(Vec(LoadPipelineWidth, chiselTypeOf(io.req(0).bits)))
+  val s1_valid = Wire(Vec(LoadPipelineWidth, Bool()))
+
+  if (LoadPipelineWidth == 3) {
+    val s1_selOH = Wire(Vec(LoadPipelineWidth, Vec(LoadPipelineWidth, Bool())))
+
+    def s1Older(i: Int, j: Int): Bool = {
+      val pi = s1_in(i).ptr
+      val pj = s1_in(j).ptr
+      val tie = pi === pj
+      s1_in(i).valid && s1_in(j).valid && (pi < pj || (tie && (i.U < j.U)))
+    }
+
+    val s1_o01 = s1Older(0, 1)
+    val s1_o02 = s1Older(0, 2)
+    val s1_o12 = s1Older(1, 2)
+
+    val oldestOH = VecInit(Seq(
+      s1_in(0).valid && (!s1_in(1).valid || s1_o01) && (!s1_in(2).valid || s1_o02),
+      s1_in(1).valid && (!s1_in(0).valid || !s1_o01) && (!s1_in(2).valid || s1_o12),
+      s1_in(2).valid && (!s1_in(0).valid || !s1_o02) && (!s1_in(1).valid || !s1_o12)
+    ))
+
+    val youngestOH = VecInit(Seq(
+      s1_in(0).valid && (!s1_in(1).valid || !s1_o01) && (!s1_in(2).valid || !s1_o02),
+      s1_in(1).valid && (!s1_in(0).valid || s1_o01) && (!s1_in(2).valid || !s1_o12),
+      s1_in(2).valid && (!s1_in(0).valid || s1_o02) && (!s1_in(1).valid || s1_o12)
+    ))
+
+    val middleOH = VecInit((0 until LoadPipelineWidth).map(i => s1_in(i).valid && !oldestOH(i) && !youngestOH(i)))
+
+    val noneValid = !s1_in.map(_.valid).reduce(_ || _)
+    val oneValid = PopCount(s1_in.map(_.valid)) === 1.U
+
+    s1_selOH(0) := Mux(noneValid, VecInit(true.B, false.B, false.B), oldestOH)
+    s1_selOH(1) := Mux(oneValid, VecInit(false.B, true.B, false.B), middleOH)
+    s1_selOH(2) := Mux(oneValid || noneValid, VecInit(false.B, false.B, true.B), youngestOH)
+
+    for (i <- 0 until LoadPipelineWidth) {
+      s1_req(i) := Mux1H((0 until LoadPipelineWidth).map(j => s1_selOH(i)(j) -> s1_in(j).bits))
+      s1_valid(i) := Mux1H((0 until LoadPipelineWidth).map(j => s1_selOH(i)(j) -> s1_in(j).valid))
+    }
+  } else {
+    val s1_sortedVec = HwSort(s1_in)
+    s1_req := VecInit(s1_sortedVec.map(_.bits))
+    s1_valid := VecInit(s1_sortedVec.map(_.valid))
+  }
   val s2_enqueue = Wire(Vec(LoadPipelineWidth, Bool()))
   io.req.zipWithIndex.foreach{ case (r, i) =>
     r.ready := true.B
