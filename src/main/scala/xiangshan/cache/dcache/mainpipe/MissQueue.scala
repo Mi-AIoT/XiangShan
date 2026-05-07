@@ -1371,9 +1371,10 @@ class MissQueue(edge: TLEdgeOut, reqNum: Int)(implicit p: Parameters) extends DC
         can_merge_from_pipe_mshr(i) := parallel_pipe_regs(j).mshr_id
       }
 
-      // can not sent acquire: not alloc, or can merge store
+      // A store merging into an allocating pipe reg must be included before
+      // sending Acquire, otherwise the entry cmd and Grant param can diverge.
       when(parallel_pipe_regs(j).alloc && !parallel_pipe_regs(j).cancel && parallel_pipe_regs(j).merge_req(signals_j) && io.queryMQ(i).req.bits.isFromStore && io.queryMQ(i).req.valid) {
-        can_merge_store_from_pipe(i) := true.B
+        can_merge_store_from_pipe(j) := true.B
       }
 
       // do not alloc when (addr_match & alias_match)
@@ -1542,7 +1543,8 @@ class MissQueue(edge: TLEdgeOut, reqNum: Int)(implicit p: Parameters) extends DC
 
     val alloc_ready = has_alloc && !has_compress && !has_merge && is_valid
 
-    io.queryMQ(i).ready := (compress_ready || merge_ready || alloc_ready) && !(io.wbq_block_miss_req(i) || io.queryMQ(analysis.compress_group(i)).req.bits.cancel)
+    io.queryMQ(i).ready := (compress_ready || merge_ready || alloc_ready) && 
+      !(io.wbq_block_miss_req(i) || io.wbq_block_miss_req(analysis.compress_group(i)) || io.queryMQ(analysis.compress_group(i)).req.bits.cancel)
   }
 
   // For each queryMQ request that was granted, connect to MissEntry or PipeReg
