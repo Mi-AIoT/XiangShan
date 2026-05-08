@@ -1357,10 +1357,7 @@ class MissQueue(edge: TLEdgeOut, reqNum: Int)(implicit p: Parameters) extends DC
   }
 
   for(i <- 0 until reqNum) {
-    can_merge_from_pipe(i) := false.B
     can_merge_from_pipe_mshr(i) := 0.U
-    can_merge_store_from_pipe(i) := false.B
-    match_from_pipe(i) := false.B
 
     for (j <- (0 until reqNum).reverse) {
       val signals_j = computeMatchSignals(parallel_pipe_regs(j).req, io.queryMQ(i).req.bits)
