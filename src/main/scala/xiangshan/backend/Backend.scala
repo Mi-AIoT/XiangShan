@@ -312,6 +312,7 @@ class BackendInlinedImp(override val wrapper: BackendInlined)(implicit p: Parame
   intRegion.io.F2IWakeupIn.  foreach(x => x := fpRegion.io.cross.F2IWakeupOut.get)
   intRegion.io.wakeupFromLDU.foreach(x => x := io.mem.wakeup)
   intRegion.io.staFeedback.  foreach(x => x := io.mem.staIqFeedback)
+  intRegion.io.stdFeedback.  foreach(x => x := io.mem.stdIqFeedback)
   vecRegion.io.vstuFeedback. foreach(x => x := io.mem.vstuIqFeedback)
   intRegion.io.ldCancel := io.mem.ldCancel
   intRegion.io.vlWriteBackInfoIn := 0.U.asTypeOf(intRegion.io.vlWriteBackInfoIn)
@@ -637,6 +638,7 @@ class BackendMemIO(implicit p: Parameters, params: BackendParams) extends XSBund
   val lsqEnqIO = Flipped(new LsqEnqIO)
   val robLsqIO = new RobLsqIO
   val staIqFeedback = Vec(params.StaCnt, Flipped(new MemRSFeedbackIO))
+  val stdIqFeedback = Vec(params.StdCnt, Flipped(new MemRSFeedbackIO))
   val hyuIqFeedback = Vec(params.HyuCnt, Flipped(new MemRSFeedbackIO))
   val vstuIqFeedback = Flipped(Vec(params.VstuCnt, new MemRSFeedbackIO(isVector = true)))
   val vlduIqFeedback = Flipped(Vec(params.VlduCnt, new MemRSFeedbackIO(isVector = true)))

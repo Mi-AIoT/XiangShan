@@ -88,7 +88,7 @@ object LoadEntrance extends ChiselOHEnum {
 
 class LoadAccessType extends Bundle {
   val instrType = InstrType()
-  val pftType = PrefetchType() // only 
+  val pftType = PrefetchType() // only
   val pftCoh = PrefetchCoh()
 
   import InstrType._

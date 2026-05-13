@@ -32,6 +32,7 @@ import xiangshan.mem.prefetch.{PrefetchReqBundle, TrainReqBundle}
 import xiangshan.backend.exu.ExeUnitParams
 
 import scala.math._
+import utils.OptionWrapper
 
 object Bundles {
 
@@ -226,7 +227,7 @@ object Bundles {
     val need_rep = Bool()
   }
 
-  class StoreForwardReqS0(implicit p: Parameters) extends XSBundle {
+  class StoreForwardReqS0(implicit p: Parameters) extends MemBlockBundle {
     val vaddr = UInt(VAddrBits.W)
     val sqIdx = new SqPtr
     val size = UInt(MemorySize.Size.width.W)
@@ -239,6 +240,8 @@ object Bundles {
     val ssid = UInt(SSIDWidth.W)
     val storeSetHit = Bool() // inst has been allocated an store set
     val waitForRobIdx = new RobPtr // store set predicted previous store robIdx
+
+    val debug_robIdx = OptionWrapper(debugEn, new RobPtr)
   }
 
   class StoreForwardReqS1(implicit p: Parameters) extends XSBundle {

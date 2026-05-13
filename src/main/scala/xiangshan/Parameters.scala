@@ -103,7 +103,7 @@ case class XSCoreParameters
   LoadQueueReplaySize: Int = 72,
   LoadUncacheBufferSize: Int = 16,
   LoadQueueNWriteBanks: Int = 8, // NOTE: make sure that LoadQueueRARSize/LoadQueueRAWSize is divided by LoadQueueNWriteBanks
-  StoreQueuePhysicalSize: Int = 32, // preferably a power of 2
+  StoreQueuePhysicalSize: Int = 48, // preferably a power of 2
   StoreQueueMultiple: Int = 2, // preferably a power of 2
   StoreQueueSnapshotInterval: Int = 1, // must a power of 2
   SQUnalignQueueSize: Int = 2,
@@ -802,9 +802,9 @@ trait HasXSParameter {
   def LWTUse2BitCounter = true
   // store set parameters
   def SSITSize = WaitTableSize
-  def LFSTSize = 32
+  def LFSTSize = 64
   def SSIDWidth = log2Up(LFSTSize)
-  def LFSTWidth = 4
+  def LFSTWidth = 2
   def StoreSetEnable = true // LWT will be disabled if SS is enabled
   def LFSTEnable = true
 
