@@ -93,7 +93,9 @@ class TLMinimalConfig(n: Int = 1) extends Config(
         LoadUncacheBufferSize = 8,
         LoadQueueNWriteBanks = 4, // NOTE: make sure that LoadQueue{RAR, RAW, Replay}Size is divided by LoadQueueNWriteBanks.
         RollbackGroupSize = 8,
-        StoreQueueSize = 20,
+        StoreQueuePhysicalSize = 16, // preferably a power of 2
+        StoreQueueMultiple = 2, // preferably a power of 2
+        StoreQueueSnapshotInterval = 1, // must a power of 2
         StoreQueueNWriteBanks = 4, // NOTE: make sure that StoreQueueSize is divided by StoreQueueNWriteBanks
         StoreQueueForwardWithMask = true,
         // ============ VLSU ============
