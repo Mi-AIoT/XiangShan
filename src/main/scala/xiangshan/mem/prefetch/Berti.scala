@@ -229,7 +229,7 @@ class HistoryTable()(implicit p: Parameters) extends BertiModule {
   })
 
   /*** data structure */
-  val enableDecrMode = Constantin.createRecord(_name+"_enableDecrMode", 1)
+  val enableDecrMode = Constantin.createRecord(_name+"_enableDecrMode", 0)
   // TODO lyq: refractor
   val entries = Reg(Vec(HtSetSize, Vec(HtWaySize, new Entry)))
   val valids = RegInit(0.U.asTypeOf(Vec(HtSetSize, Vec(HtWaySize, Bool()))))
