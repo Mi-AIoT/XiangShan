@@ -1256,7 +1256,7 @@ class MissQueue(edge: TLEdgeOut, reqNum: Int)(implicit p: Parameters) extends DC
 
   // Store misses may reside either in MSHR entries or in the miss_req_pipe_reg.
   // sbuffer-flush should wait until both places are clear.
-  val mshr_has_store = Cat(entries.map(_.io.req_hasStore) :+ (miss_req_pipe_reg.reg_valid() && miss_req_pipe_reg.req.isFromStore)).orR
+  val mshr_has_store = Cat(entries.map(_.io.req_hasStore)  ++ parallel_pipe_regs.map(pipe_reg => pipe_reg.reg_valid() && pipe_reg.req.isFromStore)).orR
   io.mshr_store_empty := !mshr_has_store
 
   val primary_ready_vec = entries.map(_.io.primary_ready)
