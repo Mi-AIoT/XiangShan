@@ -217,6 +217,7 @@ object Bundles {
       }
       connectSamePort(this, inputReg)
       this.rep_info := DontCare
+      this.rep_info.need_rep := false.B
       this.nc_with_data := DontCare
       this.data_wen_dup := DontCare
     }
