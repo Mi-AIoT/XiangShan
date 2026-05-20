@@ -753,9 +753,9 @@ trait HasXSParameter {
   def EnableStorePrefetchSPB = coreParams.EnableStorePrefetchSPB
   def MissReqPortCount = {
     if (EnableStorePrefetchAtCommit || EnableStorePrefetchAtIssue || EnableStorePrefetchSPB) {
-      1 + backendParams.LduCnt + backendParams.StaCnt + backendParams.HyuCnt
+      1 + backendParams.LduCnt + backendParams.StaCnt
     } else {
-      1 + backendParams.LduCnt + backendParams.HyuCnt
+      1 + backendParams.LduCnt
     }
   }
   def HasCMO = coreParams.HasCMO && p(EnableCHI)
