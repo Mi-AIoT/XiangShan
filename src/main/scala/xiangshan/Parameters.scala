@@ -103,7 +103,7 @@ case class XSCoreParameters
   LoadQueueReplaySize: Int = 72,
   LoadUncacheBufferSize: Int = 16,
   LoadQueueNWriteBanks: Int = 8, // NOTE: make sure that LoadQueueRARSize/LoadQueueRAWSize is divided by LoadQueueNWriteBanks
-  StoreQueuePhysicalSize: Int = 64, // preferably a power of 2
+  StoreQueuePhysicalSize: Int = 48, // preferably a power of 2
   StoreQueueMultiple: Int = 4, // preferably a power of 2
   StoreQueueSnapshotInterval: Int = 1, // must a power of 2
   SQUnalignQueueSize: Int = 2,
