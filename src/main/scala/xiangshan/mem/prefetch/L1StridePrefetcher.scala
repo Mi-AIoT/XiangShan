@@ -42,7 +42,7 @@ trait HasStridePrefetchHelper extends HasL1PrefetchHelper {
   val STRIDE_ENTRY_NUM = 10
   val STRIDE_BITS = 10 + BLOCK_OFFSET
   val STRIDE_VADDR_BITS = 10 + BLOCK_OFFSET
-  val STRIDE_CONF_BITS = 2
+  val STRIDE_CONF_BITS = 3
 
   // detail control
   val ALWAYS_UPDATE_PRE_VADDR = true
@@ -53,6 +53,7 @@ trait HasStridePrefetchHelper extends HasL1PrefetchHelper {
   val STRIDE_WIDTH_BLOCKS = if(AGGRESIVE_POLICY) STRIDE_LOOK_AHEAD_BLOCKS else 1
 
   def MAX_CONF = (1 << STRIDE_CONF_BITS) - 1
+  def CONF_THRESHOLD = (1 << (STRIDE_CONF_BITS-1)) - 1
 }
 
 class StrideMetaBundle(implicit p: Parameters) extends XSBundle with HasStridePrefetchHelper {
@@ -87,7 +88,7 @@ class StrideMetaBundle(implicit p: Parameters) extends XSBundle with HasStridePr
     val stride_valid = new_stride_blk =/= 0.U && new_stride_blk =/= 1.U && new_stride(STRIDE_VADDR_BITS - 1) === 0.U
     val stride_match = new_stride === stride
     val low_confidence = confidence <= 1.U
-    val can_send_pf = stride_valid && stride_match && confidence === MAX_CONF.U
+    val can_send_pf = stride_valid && stride_match && confidence >= CONF_THRESHOLD.U
 
     when(stride_valid) {
       when(stride_match) {
@@ -241,17 +242,17 @@ class StrideMetaArray(implicit p: Parameters) extends XSModule with HasStridePre
   XSPerfAccumulate("l1_pf_valid", s3_valid)
   XSPerfAccumulate("l2_pf_valid", s4_valid)
   XSPerfAccumulate("detect_stream", io.stream_lookup_resp)
-  XSPerfHistogram("high_conf_num", PopCount(VecInit(array.zipWithIndex.map { case (entry, idx) => valids(idx) && entry.confidence === MAX_CONF.U })).asUInt, true.B, 0, STRIDE_ENTRY_NUM, 1)
+  XSPerfHistogram("high_conf_num", PopCount(VecInit(array.zipWithIndex.map { case (entry, idx) => valids(idx) && entry.confidence >= CONF_THRESHOLD.U })).asUInt, true.B, 0, STRIDE_ENTRY_NUM, 1)
   for(i <- 0 until STRIDE_ENTRY_NUM) {
     XSPerfAccumulate(s"entry_${i}_update", i.U === s1_index && s1_update)
     XSPerfAccumulate(s"entry_${i}_alloc", i.U === s1_index && s1_alloc)
-    val active_entry = valids(s1_index) && array(s1_index).confidence === MAX_CONF.U
+    val active_entry = valids(s1_index) && array(s1_index).confidence >= CONF_THRESHOLD.U
     XSPerfAccumulate(s"entry_${i}_evict", i.U === s1_index && active_entry && s1_alloc)
   }
   for (j <- 0 until STRIDE_VADDR_BITS) {
     val highestOne = Reverse(PriorityEncoderOH(Reverse(array(s1_index).stride)))
     val is_stride_j = highestOne === (1 << j).U
-    XSPerfAccumulate(s"stride_${j}", s1_can_send_pf && array(s1_index).confidence === MAX_CONF.U && is_stride_j)
+    XSPerfAccumulate(s"stride_${j}", s1_can_send_pf && array(s1_index).confidence >= CONF_THRESHOLD.U && is_stride_j)
   }
   XSPerfAccumulate("always_update", s1_update && s1_stride_valid)
 
