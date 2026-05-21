@@ -93,11 +93,10 @@ class StrideMetaBundle(implicit p: Parameters) extends XSBundle with HasStridePr
     when(stride_valid) {
       when(stride_match) {
         confidence := Mux(confidence === MAX_CONF.U, confidence, confidence + 1.U)
+      }.elsewhen(low_confidence){
+        stride := new_stride
       }.otherwise {
         confidence := Mux(confidence === 0.U, confidence, confidence - 1.U)
-        when(low_confidence) {
-          stride := new_stride
-        }
       }
       pre_vaddr := new_vaddr
     }
