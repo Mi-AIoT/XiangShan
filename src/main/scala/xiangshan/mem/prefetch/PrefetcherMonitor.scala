@@ -41,14 +41,14 @@ class MainPrefetchStatBundle()(implicit p: Parameters) extends XSBundle with Has
 }
 
 class MissPrefetchStatBundle()(implicit p: Parameters) extends XSBundle with HasL1PrefetchSourceParameter {
-  val pf_late_in_mshr = Bool() // from missqueue, pf req match a existing mshr
-  val pf_late_in_mshr_source = UInt(L1PfSourceBits.W) // from missqueue, pf req match a existing mshr, it's source type
-  val prefetch_miss = Bool() // from missqueue, pf req allocate a new mshr
-  val pf_source = UInt(L1PfSourceBits.W)
+  val pf_late_in_mshr = UInt(MissReqPortCount.W) // from missqueue, pf req match a existing mshr
+  val pf_late_in_mshr_source = Vec(MissReqPortCount, UInt(L1PfSourceBits.W)) // from missqueue, pf req match a existing mshr, it's source type
+  val prefetch_miss = UInt(MissReqPortCount.W) // from missqueue, pf req allocate a new mshr
+  val pf_source = Vec(MissReqPortCount, UInt(L1PfSourceBits.W))
 
-  val hit_pf_in_mshr = Bool() // from missqueue, demand miss match a existing pf mshr, then clear pf flag
-  val hit_pf_in_mshr_source = UInt(L1PfSourceBits.W) // from missqueue, the pf source of demand miss matched
-  val load_miss = Bool() // from missqueue, load demand miss allocate a new mshr
+  val hit_pf_in_mshr = UInt(MissReqPortCount.W) // from missqueue, demand miss match a existing pf mshr, then clear pf flag
+  val hit_pf_in_mshr_source = Vec(MissReqPortCount, UInt(L1PfSourceBits.W)) // from missqueue, the pf source of demand miss matched
+  val load_miss = UInt(MissReqPortCount.W) // from missqueue, load demand miss allocate a new mshr
 }
 
 class PrefetcherMonitorBundle()(implicit p: Parameters) extends XSBundle with HasL1PrefetchSourceParameter {
@@ -196,13 +196,13 @@ class L1PrefetchMonitor(param : PrefetcherMonitorParam)(implicit p: Parameters) 
   val total_prefetch = io.prefetch_info.loadinfo.map(t => t.total_prefetch && param.isMyType(t.pf_source)).reduce(_ || _)
   val pf_late_in_cache = io.prefetch_info.loadinfo.map(t => t.pf_late_in_cache && param.isMyType(t.pf_source)).reduce(_ || _)
   val nack_prefetch = io.prefetch_info.loadinfo.map(t => t.nack_prefetch && param.isMyType(t.pf_source)).reduce(_ || _)
-  val pf_late_in_mshr = io.prefetch_info.missinfo.pf_late_in_mshr && param.isMyType(io.prefetch_info.missinfo.pf_source)
+  val pf_late_in_mshr = PopCount((0 until MissReqPortCount).map(i => io.prefetch_info.missinfo.pf_late_in_mshr(i) && param.isMyType(io.prefetch_info.missinfo.pf_source(i))))
   val hit_pf_in_cache = PopCount(io.prefetch_info.loadinfo.map(t => t.hit_pf_in_cache && param.isMyType(t.hit_source)) ++ Seq(io.prefetch_info.maininfo.hit_pf_in_cache && param.isMyType(io.prefetch_info.maininfo.hit_pf_source_in_cache)))
   val pf_useless = io.prefetch_info.maininfo.pf_useless && param.isMyType(io.prefetch_info.maininfo.pf_source_useless)
-  val prefetch_miss = io.prefetch_info.missinfo.prefetch_miss && param.isMyType(io.prefetch_info.missinfo.pf_source)
-  val hit_pf_in_mshr = io.prefetch_info.missinfo.hit_pf_in_mshr && param.isMyType(io.prefetch_info.missinfo.hit_pf_in_mshr_source)
-  val hit_pf = hit_pf_in_cache + hit_pf_in_mshr.asUInt
-  val pf_late = pf_late_in_cache.asUInt + pf_late_in_mshr.asUInt
+  val prefetch_miss = PopCount((0 until MissReqPortCount).map(i => io.prefetch_info.missinfo.prefetch_miss(i) && param.isMyType(io.prefetch_info.missinfo.pf_source(i))))
+  val hit_pf_in_mshr = PopCount((0 until MissReqPortCount).map(i => io.prefetch_info.missinfo.hit_pf_in_mshr(i) && param.isMyType(io.prefetch_info.missinfo.hit_pf_in_mshr_source(i))))
+  val hit_pf = hit_pf_in_cache + hit_pf_in_mshr
+  val pf_late = pf_late_in_cache.asUInt + pf_late_in_mshr
 
   total_prefetch_cnt := Mux(timely_reset, 0.U, total_prefetch_cnt + total_prefetch)
   pf_late_in_cache_cnt := Mux(timely_reset, 0.U, pf_late_in_cache_cnt + pf_late_in_cache)
@@ -277,8 +277,9 @@ class L1PrefetchMonitor(param : PrefetcherMonitorParam)(implicit p: Parameters) 
         y.pf_late_in_cache && param.isMyType(y.pf_source) && isLateHitX(y.pf_late_in_cache_source)
     )))
     XSPerfAccumulate(s"l1prefetchLateInMSHR${param.name}_Hit${x}",
-      io.prefetch_info.missinfo.pf_late_in_mshr && param.isMyType(io.prefetch_info.missinfo.pf_source)
-        && isLateHitX(io.prefetch_info.missinfo.pf_late_in_mshr_source)
+      PopCount((0 until MissReqPortCount).map(i => 
+        io.prefetch_info.missinfo.pf_late_in_mshr(i) && param.isMyType(io.prefetch_info.missinfo.pf_source(i))
+          && isLateHitX(io.prefetch_info.missinfo.pf_late_in_mshr_source(i))))
     )
   }
   XSPerfAccumulate(s"l1prefetchUseless${param.name}", pf_useless)
