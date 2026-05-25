@@ -1151,15 +1151,16 @@ class LoadUnitS2(param: ExeUnitParams)(
   io.rawNukeQueryReq.valid := nukeQueryReqValid && pipeIn.valid
   io.rawNukeQueryReq.bits := nukeQueryReq
 
+  val cacheMiss = tlbHit && io.dcacheResp.fire && io.dcacheResp.bits.miss
+  val trainMiss = tlbMiss || cacheMiss
   // TODO: Currently, we don't train prefetcher on vector request, because vector instruction PC is incorrect.
-  // TODO: `isFirstIssue` is Fake First Issue according to prefetcher !!!
-  io.prefetchTrain.valid := pipeIn.valid && tlbHit && !exception && !isUncache && !isUncacheReplay &&
+  val prefetchTrainValid = pipeIn.valid && !kill && !exception && !isUncache && !isUncacheReplay &&
     in.isFirstIssue() && !isVector
+  io.prefetchTrain.valid := prefetchTrainValid
   io.prefetchTrain.bits.robIdx := uop.robIdx
   io.prefetchTrain.bits.pc := uop.pc
   io.prefetchTrain.bits.vaddr := in.vaddr
-  io.prefetchTrain.bits.paddr := paddr
-  io.prefetchTrain.bits.miss := io.dcacheResp.bits.miss
+  io.prefetchTrain.bits.miss := trainMiss
   io.prefetchTrain.bits.isFirstIssue := in.isFirstIssue()
   io.prefetchTrain.bits.metaSource := io.dcacheResp.bits.meta_prefetch
   io.prefetchTrain.bits.isHwPrefetch := accessType.isHwPrefetch()

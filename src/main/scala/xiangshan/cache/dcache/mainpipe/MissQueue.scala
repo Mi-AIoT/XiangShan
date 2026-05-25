@@ -954,7 +954,6 @@ class MissEntry(edge: TLEdgeOut, reqNum: Int)(implicit p: Parameters) extends DC
 
   io.refill_train.valid := req_valid && w_grantlast
   io.refill_train.bits.pc := req.pc
-  io.refill_train.bits.paddr := req.addr
   io.refill_train.bits.vaddr := req.vaddr
   io.refill_train.bits.miss := true.B
   // FIXME lyq: when mshr entry merges, req.pf_source may be cleaned.

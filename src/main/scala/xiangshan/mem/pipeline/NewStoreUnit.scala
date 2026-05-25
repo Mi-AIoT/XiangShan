@@ -692,14 +692,14 @@ class StoreUnitS2(param: ExeUnitParams)(
   io.toSqAddrRe.uop := DontCare
   io.toSqAddrRe.isHyper := DontCare
 
-  val prefetchTrainValid = fire && io.dcacheResp.fire && tlbHit && tlbAccessible && !hasException && !isUncache
+  val prefetchTrainValid = fire && !hasException && !isUncache && in.isFirstIssue
+  val trainMiss = tlbMiss || cacheMiss
   io.prefetchTrainHint := prefetchTrainValid
   io.prefetchTrain.valid := prefetchTrainValid
   io.prefetchTrain.bits.robIdx := uop.robIdx
   io.prefetchTrain.bits.pc := uop.pc
   io.prefetchTrain.bits.vaddr := in.vaddr
-  io.prefetchTrain.bits.paddr := in.paddr.get
-  io.prefetchTrain.bits.miss := cacheMiss
+  io.prefetchTrain.bits.miss := trainMiss
   io.prefetchTrain.bits.isFirstIssue := in.isFirstIssue
   io.prefetchTrain.bits.metaSource := L1_HW_PREFETCH_NULL
   io.prefetchTrain.bits.isHwPrefetch := isHWPrefetch
