@@ -30,11 +30,11 @@ import xiangshan.mem.L1PrefetchReq
 case class BertiParams
 (
   name: String = "berti",
-  ht_set_cnt: Int = 64, //8,
-  ht_way_cnt: Int = 6, // 16,
+  ht_set_cnt: Int = 16, // areaOpt. // 64, gem5. // 8 , paper.
+  ht_way_cnt: Int = 6 , // areaOpt. // 6 , gem5. // 16, paper.
   ht_replacement_policy: String = "fifo",
-  dt_way_cnt: Int = 64, // 16,
-  dt_delta_size: Int = 4, // 16,
+  dt_way_cnt: Int = 16,   // 64, gem5. // 16, paper.
+  dt_delta_size: Int = 4, // 4 , gem5. // 16, paper.
   use_byte_addr: Boolean = false,
 ) extends PrefetcherParams{
   override def TRAIN_FILTER_SIZE = 6
