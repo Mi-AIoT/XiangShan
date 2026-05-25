@@ -49,7 +49,7 @@ class StdExeUnit(val param: ExeUnitParams)(implicit p: Parameters) extends XSMod
   // feedback
   val s1_feedback = Wire(Valid(new RSFeedback))
   s1_feedback.valid                 := io.in.valid
-  s1_feedback.bits.hit              := s0_legal_issue
+  s1_feedback.bits.hit              := s0_legal_issue || FuType.storeIsAMO(io.in.bits.fuType)
   s1_feedback.bits.flushState       := DontCare
   s1_feedback.bits.robIdx           := io.in.bits.robIdx
   s1_feedback.bits.sourceType       := DontCare

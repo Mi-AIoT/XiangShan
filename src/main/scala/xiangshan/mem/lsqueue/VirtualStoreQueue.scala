@@ -267,12 +267,14 @@ class VirtualStoreQueue[PhysicalQueuePtrType <: MultiFlagCircularQueuePtr[Physic
   }
 
   // retired store, which had retired by rob
+  // preCommitMoveValid indicates the preCommitPtr can move, It will retire before rob retire. After preCommitPtr move, virtualStoreQueue need to release entry.
+  val preCommitMoveValid = dataEntries(preCommitPtr.value).robIdx === robHeadPtr && ctrlEntries(preCommitPtr.value).allocated
   val retireCount = PopCount(retireVec)
 
   deqPtrVec.zipWithIndex.map{ case (ptr, i) =>
     if(i == 0) {
       retireVec(i) := isBefore(dataEntries(ptr.value).robIdx, robHeadPtr) &&
-        ctrlEntries(ptr.value).allocated
+        ctrlEntries(ptr.value).allocated || preCommitMoveValid
     }
     else {
       retireVec(i) := isBefore(dataEntries(ptr.value).robIdx, robHeadPtr) &&
@@ -289,7 +291,6 @@ class VirtualStoreQueue[PhysicalQueuePtrType <: MultiFlagCircularQueuePtr[Physic
   deqPtrVec := deqPtrVecNext
 
   // precommit store, it will be write to sbuffer before rob retire.
-  val preCommitMoveValid = dataEntries(preCommitPtr.value).robIdx === robHeadPtr && ctrlEntries(preCommitPtr.value).allocated
 
   val preCommitPtrNext = WireInit(preCommitPtr)
   when(redirectReg.valid) { // redirect next cycle update preCommitPtr
@@ -346,7 +347,7 @@ class VirtualStoreQueue[PhysicalQueuePtrType <: MultiFlagCircularQueuePtr[Physic
   io.toPhysicalQueue.redirectPtr.valid := toPhysicalQueueRedirectValid
   io.toPhysicalQueue.redirectPtr.bits := toPhysicalQueueRedirectPtr
 
-  io.toPhysicalQueue.headRobIdx := dataEntries(deqPtrVec.head.value).robIdx
+  io.toPhysicalQueue.headRobIdx := RegEnable(dataEntries(deqPtrVec.head.value).robIdx, preCommitMoveValid)
 
   val sqRecoverStall = state =/= WalkState.idle || RegNext(redirectReg.valid) || DelayN(redirectReg.valid, 2)
   io.sqRecoverStall := sqRecoverStall
@@ -363,6 +364,7 @@ class VirtualStoreQueue[PhysicalQueuePtrType <: MultiFlagCircularQueuePtr[Physic
   }
 
   XSError(state =/= WalkState.idle && io.enq.req.map(_.valid).reduce(_ || _), s"Virtual StoreQueue is walking, but new request enter!\n")
+  XSError(isFull(enqPtrVec.head, deqPtrVec.head) && io.enq.req.map(_.valid).reduce(_ || _), s"Virtual StoreQueue is full, but have requestor enter!\n")
 }
 
 import top.Generator
