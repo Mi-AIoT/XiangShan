@@ -114,6 +114,18 @@ class StrideMetaBundle(implicit p: Parameters) extends XSBundle with HasStridePr
 
 }
 
+class StrideTrainTraceEntry(implicit p: Parameters) extends XSBundle with HasStridePrefetchHelper {
+  val pre_vaddr = UInt(STRIDE_VADDR_BITS.W)
+  val stride = UInt(STRIDE_BITS.W)
+  val decr_mode = Bool()
+  val confidence = UInt(STRIDE_CONF_BITS.W)
+  val hash_pc = UInt(HASH_TAG_WIDTH.W)
+  val s0_hit = Bool()
+  val s0_index = UInt(STRIDE_ENTRY_NUM.W)
+  val s0_pc_hash = UInt(HASH_TAG_WIDTH.W)
+  val s0_vaddr = UInt(VAddrBits.W)
+}
+
 class StrideMetaArray(implicit p: Parameters) extends XSModule with HasStridePrefetchHelper {
   val io = IO(new XSBundle {
     val enable = Input(Bool())
@@ -161,6 +173,29 @@ class StrideMetaArray(implicit p: Parameters) extends XSModule with HasStridePre
   XSPerfAccumulate("s0_valid", s0_valid)
   XSPerfAccumulate("s0_hit", s0_valid && s0_hit)
   XSPerfAccumulate("s0_miss", s0_valid && !s0_hit)
+  
+  val stride_pf_train_debug_table = ChiselDB.createTable("StrideTrainTraceTable" + p(XSCoreParamsKey).HartId.toString, new StrideTrainTraceEntry, basicDB = false)
+
+  val spf_log_enable = s0_valid
+  val spf_log_data = Wire(new StrideTrainTraceEntry)
+
+  spf_log_data.s0_pc_hash := s0_pc_hash
+  spf_log_data.s0_hit := s0_hit
+  spf_log_data.s0_index := s0_index
+  spf_log_data.s0_vaddr := s0_vaddr
+  spf_log_data.pre_vaddr := array(s0_index).pre_vaddr
+  spf_log_data.stride := array(s0_index).stride
+  spf_log_data.decr_mode := array(s0_index).decr_mode
+  spf_log_data.confidence := array(s0_index).confidence
+  spf_log_data.hash_pc := array(s0_index).hash_pc
+
+  stride_pf_train_debug_table.log(
+    data = spf_log_data,
+    en = spf_log_enable,
+    site = "StrideTrainTraceTable",
+    clock = clock,
+    reset = reset
+  )
 
   // s1: alloc or update
   val s1_valid = GatedValidRegNext(s0_valid)
