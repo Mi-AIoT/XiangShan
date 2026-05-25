@@ -135,11 +135,14 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
   val s0_bank_oh_64 = UIntToOH(addr_to_dcache_bank(s0_vaddr))
   val s0_bank_oh_128 = (s0_bank_oh_64 << 1.U).asUInt | s0_bank_oh_64.asUInt
   val s0_bank_oh = Mux(s0_load128Req, s0_bank_oh_128, s0_bank_oh_64)
+  val s0_is_prefetch = s0_req.instrtype === DCACHE_PREFETCH_SOURCE.U
   assert(RegNext(!(s0_valid && (s0_req.cmd =/= MemoryOpConstants.M_XRD && s0_req.cmd =/= MemoryOpConstants.M_PFR && s0_req.cmd =/= MemoryOpConstants.M_PFW))), "LoadPipe only accepts load req / softprefetch read or write!")
   dump_pipeline_reqs("LoadPipe s0", s0_valid, s0_req)
   
-  wr_conflict_check := io.writehint.valid && (io.writehint.bits & s0_bank_oh).orR
+  val raw_wr_conflict_check = io.writehint.valid && (io.writehint.bits & s0_bank_oh).orR
+  wr_conflict_check := raw_wr_conflict_check && !s0_is_prefetch
   XSPerfAccumulate("wr_conflict_no_ready", io.lsu.req.valid && wr_conflict_check)
+  XSPerfAccumulate("wr_conflict_no_ready_prefetch_filtered", io.lsu.req.valid && raw_wr_conflict_check && s0_is_prefetch)
 
   // wpu
   // val dwpu = Module(new DCacheWpuWrapper)
