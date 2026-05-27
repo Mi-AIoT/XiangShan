@@ -513,7 +513,7 @@ OS 程序（Linux 应用）：
 - OS 控制程序生命周期
 ```
 
-**SPEC2006 是裸机程序，不需要中断、不需要调度、不需要 OS。**
+**注意**：SPEC2006 在 XiangShan 上的具体运行环境（裸机 vs Linux）尚未确认。如果是裸机运行，则不需要中断和调度；如果是 Linux 运行，则需要定时器中断和调度器。请参考第 2.1 节的分析。
 
 ---
 
@@ -521,7 +521,7 @@ OS 程序（Linux 应用）：
 
 | 文件 | 行号 | 内容 |
 |------|------|------|
-| `scripts/top-down/configs.py` | 401-426 | SPEC2006 benchmark 列表（全部单线程） |
+| `scripts/top-down/configs.py` | 401-426 | SPEC2006 benchmark 列表（整数 12 个单线程，浮点 17 个中 11 个多线程） |
 | `Makefile` | - | NUM_CORES = 1（默认单核） |
 | `src/test/scala/top/SimTop.scala` | 130 | NMI 禁用 |
 | `difftest/src/test/csrc/emu/emu.cpp` | 131-138 | GCPT 恢复（无 OS 状态） |
@@ -531,7 +531,7 @@ OS 程序（Linux 应用）：
 
 | 术语 | 说明 |
 |------|------|
-| **SPEC CPU2006** | 单线程 CPU 性能基准测试 |
+| **SPEC CPU2006** | CPU 性能基准测试（整数全部单线程，浮点部分多线程） |
 | **SPECrate** | 多核吞吐量基准测试 |
 | **裸机（Bare-metal）** | 无操作系统直接运行 |
 | **ecall** | RISC-V 环境调用指令 |

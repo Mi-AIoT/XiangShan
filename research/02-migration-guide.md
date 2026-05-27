@@ -133,7 +133,7 @@
 | **DiffTest 接口** | Chisel 宏自动生成 | 需要手动实现 | 参考 XiangShan 实现 |
 | **性能计数器** | Chisel 注解自动插入 | 需要手动添加 | 在 RTL 中添加 `$fwrite` |
 | **内存接口** | TileLink | 可能是 AXI | 需要适配或桥接 |
-| **启动地址** | `0x80000000` | 可能不同 | 需要确认对齐 |
+| **启动地址** | `0x10000000`（复位向量） / `0x80000000`（内存基地址） | 可能不同 | 需要确认对齐 |
 
 ---
 
@@ -827,7 +827,10 @@ axi_to_difftest_ram axi_ram_bridge (
 
 ```verilog
 // 在 cpu_top.v 中
-parameter BOOT_ADDR = 64'h80000000;
+// 注意：XiangShan 的复位向量是 0x10000000（SimTop.scala:129）
+// PMEM_BASE（内存基地址）是 0x80000000（difftest/config/config.h:42）
+// 两者是不同的概念
+parameter BOOT_ADDR = 64'h10000000;  // 复位向量
 ```
 
 ---
@@ -899,7 +902,8 @@ $fwrite(32'h80000002, "[PERF][time=%0d].core.xxx: yyy, %0d\n", ...);
 **问题**：程序从错误地址开始执行
 
 **解决**：
-1. 检查 `BOOT_ADDR` 是否为 `0x80000000`
+1. 检查 `BOOT_ADDR` 是否为 `0x10000000`（复位向量）
+2. 检查 `PMEM_BASE` 是否为 `0x80000000`（内存基地址）
 2. 检查 checkpoint 文件格式是否正确
 3. 检查内存大小是否足够
 

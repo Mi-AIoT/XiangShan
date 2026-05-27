@@ -33,6 +33,11 @@
 |------|------|------|
 | `12-difftest-deep-analysis.md` | 22KB | DiffTest 框架在 SPEC2006 评估中的真实角色 |
 | `13-xiangshan-deep-report.md` | 45KB | 香山处理器嵌入式视角技术深度报告（7 章） |
+| `14-interrupt-handling-in-simpoint.md` | 18KB | SimPoint/Checkpoint 恢复后的中断处理问题分析 |
+| `15-time-measurement-without-interrupts.md` | 22KB | SPEC2006 不依赖中断的时间测量机制 |
+| `16-spec2006-threading-and-scheduling.md` | 24KB | SPEC2006 线程模型与任务调度分析 |
+| `17-simpoint-interrupt-accuracy.md` | 27KB | SimPoint 评估中中断处理与分数准确性分析 |
+| `18-deep-questions-and-findings.md` | 25KB | 灵魂拷问 10 个问题：深度调研报告 |
 
 ---
 
