@@ -27,6 +27,13 @@
 | `10-performance-counters-deep-dive.md` | 18KB | 性能计数器实现详解 |
 | `11-spec-score-calculation.md` | 16KB | SPEC2006 分数计算方法详解 |
 
+### DiffTest 与深度研究
+
+| 文件 | 大小 | 内容 |
+|------|------|------|
+| `12-difftest-deep-analysis.md` | 22KB | DiffTest 框架在 SPEC2006 评估中的真实角色 |
+| `13-xiangshan-deep-report.md` | 45KB | 香山处理器嵌入式视角技术深度报告（7 章） |
+
 ---
 
 ## 学习路径建议
